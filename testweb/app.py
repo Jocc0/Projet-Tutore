@@ -6,16 +6,18 @@ import requests
 from ics import Calendar
 import pytz
 from streamlit_calendar import calendar
+from datetime import datetime
 
 load_dotenv()
-client = OpenAI(api_key=os.getenv("Clé API d'OPENAI"))
+
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 # Fonction pour récupérer l'EDT depuis l'URL ICS
 def get_edt(user_id):
     ics_url = f"http://applis.univ-nc.nc/cgi-bin/WebObjects/EdtWeb.woa/2/wa/default?login={user_id}%2Fical"
     response = requests.get(ics_url)
 
-    # S'assurer que ça soit bien encoder en UTF-8
+    # S'assurer de l'encodage UTF-8
     response.encoding = "UTF-8"
     
     if response.ok:
@@ -49,6 +51,7 @@ def generate_response(prompt):
     )
     return chat_completion.choices[0].message.content
 
+# Fonction principale pour la page web
 def main():
     st.title("Chatbot🤖")
 
@@ -68,45 +71,66 @@ def main():
         else:
             st.warning("Veuillez entrer un identifiant valide.")
 
-    # Pour choisir le mode de calendrier
-    mode = st.selectbox("Choisissez le mode de calendrier:", ["dayGridMonth", "timeGridWeek", "timeGridDay"])
-
-    # Définition des spécificités ou événement récupérer pour le calendrier
+    # Définition des événements avec les couleurs pour TD, TP, CM
     if st.session_state.edt:
-        events = [
-            {
-                'start': c['début'],
-                'end': c['fin'],
-                'title': c['nom_cours'],
-                'description': c['description']
-            } for c in st.session_state.edt
-        ]
+        events = []
+        for cours in st.session_state.edt:
+            color = ""
+            if "TD" and "Td" in cours['nom_cours']:
+                color = "#32a852"  # TD en vert clair
+            elif "TP" and "Tp" in cours['nom_cours']:
+                color = "#ffb22e"  # TP en orange clair
+            elif "CM" and "Cm" in cours['nom_cours']:
+                color = "#4287f5"  # CM en bleu clair
+            else:
+                color = "gray"  # Sinon par défaut en gris
+
+            events.append({
+                'start': cours['début'],
+                'end': cours['fin'],
+                'title': cours['nom_cours'],
+                'description': cours['description'],
+                'color': color
+            })
     else:
         events = []
 
-    # Affichage du calendrier avec CSS personnalisée
+    # Affichage du calendrier dans un conteneur
     calendar(
-        events=events,
-        options={
-            "locale": "fr",
-            'initialView': mode,
-            'editable': False,
-            'headerToolbar': {
-                'left': 'prev,next today',
-                'center': 'title',
-                'right': 'dayGridMonth,timeGridWeek,timeGridDay'
-            },
-            "slotMinTime": "07:00:00",
-            "slotMaxTime": "18:00:00",
+    events=events,
+    options={
+        "locale": "fr",  # Tout en français
+        'initialView': 'dayGridMonth',  # Vue par défaut : mois
+        'editable': True,
+        'headerToolbar': {
+            'left': 'prev,today,next',
+            'center': 'title',
+            'right': 'dayGridMonth,timeGridWeek,timeGridDay'
         },
-        
-        custom_css="""
-        .fc-event-past { opacity: 0.8; }
-        .fc-event-time { font-style: italic; }
-        .fc-event-title { font-weight: 700; }
-        .fc-toolbar-title { font-size: 2rem; }
-        .stApp { font-family: sans-serif; }
-        """
+        'views': {
+            'dayGridMonth': {'buttonText': 'Mois'},
+            'timeGridWeek': {'buttonText': 'Semaine'},
+            'timeGridDay': {'buttonText': 'Jour'}
+        },
+        "slotMinTime": "07:00:00", #C'est l'heure minimale sur le calendrier
+        "slotMaxTime": "19:00:00", #C'est l'heure maximale sur le calendrier
+        "scrollTime": "07:00:00", # C'est l'heure à laquelle le calendrier en mode jour ou semaine commence
+        "allDaySlot": False,  # permet ici de désactiver l'affichage des événements "All Day" (prennait de la place)
+        "height": 'auto',  # La hauteur s'ajustera automatiquement ici *-*
+        "contentHeight": 'auto',  # ça évite le défilement vertical dans le calendrier
+        "expandRows": True,  # Prends/remplit l'espace disponible 
+        "eventMaxHeight": 20,  # Hauteur maximale des événements
+        "stickyHeaderDates": True # Permet de garder l'en-tête fixe, si l'utilisateur doit défiler son emploi du temps, pendant le mode semaine/jour
+    },
+    custom_css="""
+    .fc-event-past { opacity: 0.8; } #Change l'opacité des événements déjà passé
+    .fc-event-time { font-style: italic; }
+    .fc-event-title { font-weight: 700; font-size: 0.85rem; }  # Réduire la taille du texte des événements
+    .fc-daygrid-event { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }  # Limiter la largeur des événements et ajouter des points de suspension
+    .fc-daygrid-block-event { max-height: 20px; }  # Restreindre la hauteur des événements dans la vue "Mois"
+    .fc-toolbar-title { font-size: 2rem; }
+    .fc-timegrid-slot { height: auto !important; }  # Ajuste la hauteur des lignes dans la vue "semaine" et "jour"
+    """
     )
 
     # Interaction avec le chatbot
