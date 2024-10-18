@@ -1,0 +1,5 @@
+# Ignore le fichier avec notre API KEY
+.env
+
+#Ignore ce truc
+__pycache__

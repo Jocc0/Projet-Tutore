@@ -8,7 +8,7 @@ import pytz
 from streamlit_calendar import calendar
 
 load_dotenv()
-client = OpenAI(api_key=os.getenv("Clé API d'OPENAI"))
+client = OpenAI(api_key=os.getenv("OPENAI_KEY"))
 
 # Fonction pour récupérer l'EDT depuis l'URL ICS
 def get_edt(user_id):
