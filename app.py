@@ -1,3 +1,4 @@
+from datetime import datetime
 import streamlit as st
 import os
 from openai import OpenAI
@@ -6,11 +7,10 @@ import requests
 from ics import Calendar
 import pytz
 from streamlit_calendar import calendar
-from datetime import datetime
 
 load_dotenv()
 
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY4"))
 
 # Fonction pour récupérer l'EDT depuis l'URL ICS
 def get_edt(user_id):
@@ -34,13 +34,15 @@ def get_edt(user_id):
         start_local = event.begin.astimezone(local_tz).strftime('%Y-%m-%d %H:%M')
         end_local = event.end.astimezone(local_tz).strftime('%Y-%m-%d %H:%M')
 
+        description_coupee = event.description.split('(')[0].strip() #réduire le nom du cours pour l'utilisation dans le chatbot
+        nom_coupee = event.name.split('(')[0].strip() #réduire le nom du cours pour l'utilisation dans le chatbot
         cours.append({
-            "nom_cours": event.name,
+            "nom_cours": nom_coupee,
             "début": start_local,
             "fin": end_local,
-            "description": event.description
+            "description": description_coupee
         })
-
+    # print(cours)
     return cours
 
 # Fonction pour générer une réponse via OpenAI
@@ -53,6 +55,7 @@ def generate_response(prompt):
 
 # Fonction principale pour la page web
 def main():
+
     st.title("Chatbot🤖")
 
     user_id = st.text_input("Entrez votre identifiant: ", "")
@@ -75,6 +78,7 @@ def main():
     if st.session_state.edt:
         events = []
         for cours in st.session_state.edt:
+            
             color = ""
             if "TD" and "Td" in cours['nom_cours']:
                 color = "#32a852"  # TD en vert clair
@@ -107,10 +111,11 @@ def main():
             'center': 'title',
             'right': 'dayGridMonth,timeGridWeek,timeGridDay'
         },
-        'views': {
-            'dayGridMonth': {'buttonText': 'Mois'},
-            'timeGridWeek': {'buttonText': 'Semaine'},
-            'timeGridDay': {'buttonText': 'Jour'}
+        "buttonText": {
+            "today": "Aujourd'hui",  # Change le texte du bouton Today
+            "month": "Mois",  # Change le texte du mode Mois
+            "week": "Semaine",  # Change le texte du mode Semaine
+            "day": "Jour"  # Change le texte du mode Jour
         },
         "slotMinTime": "07:00:00", #C'est l'heure minimale sur le calendrier
         "slotMaxTime": "19:00:00", #C'est l'heure maximale sur le calendrier
@@ -118,9 +123,10 @@ def main():
         "allDaySlot": False,  # permet ici de désactiver l'affichage des événements "All Day" (prennait de la place)
         "height": 'auto',  # La hauteur s'ajustera automatiquement ici *-*
         "contentHeight": 'auto',  # ça évite le défilement vertical dans le calendrier
-        "expandRows": True,  # Prends/remplit l'espace disponible 
+        "expandRows": True,  # Prends/remplit l'espace disponible
         "eventMaxHeight": 20,  # Hauteur maximale des événements
-        "stickyHeaderDates": True # Permet de garder l'en-tête fixe, si l'utilisateur doit défiler son emploi du temps, pendant le mode semaine/jour
+        "stickyHeaderDates": True, # Permet de garder l'en-tête fixe, si l'utilisateur doit défiler son emploi du temps pendant le mode semaine/jour
+
     },
     custom_css="""
     .fc-event-past { opacity: 0.8; } #Change l'opacité des événements déjà passé
@@ -130,6 +136,7 @@ def main():
     .fc-daygrid-block-event { max-height: 20px; }  # Restreindre la hauteur des événements dans la vue "Mois"
     .fc-toolbar-title { font-size: 2rem; }
     .fc-timegrid-slot { height: auto !important; }  # Ajuste la hauteur des lignes dans la vue "semaine" et "jour"
+    .fc-day-today {background: #f5f5f5 !important;}
     """
     )
 
