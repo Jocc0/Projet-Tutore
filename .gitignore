@@ -1,5 +1,14 @@
-# Ignore le fichier avec notre API KEY
+# Ignore le fichier .env avec notre API KEY
 .env
 
 #Ignore ce truc
 __pycache__
+
+
+#Ignore les répertoires des bdd et des logs :
+chroma/
+faiss/
+logs/
+
+#Ignore les logs si jamais ils sont pas dans le repertoire logs
+*.log

@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 openai.api_key = os.getenv("OPENAI_KEY")
+
 # Fonction pour récupérer l'EDT depuis l'URL ICS
 def get_edt(user_id):
     """Récupère l'emploi du temps (EDT) d'un utilisateur à partir d'une URL ICS.
@@ -30,10 +31,11 @@ def get_edt(user_id):
             - "fin": La date et l'heure de fin du cours au format 'YYYY-MM-DD HH:MM' (str).
             - "description": La description du cours (str).
     """
+  
     ics_url = f"http://applis.univ-nc.nc/cgi-bin/WebObjects/EdtWeb.woa/2/wa/default?login={user_id}%2Fical"
     response = requests.get(ics_url)
 
-    # S'assurer que ça soit bien encoder en UTF-8
+    # S'assurer de l'encodage UTF-8
     response.encoding = "UTF-8"
     
     if response.ok:
@@ -50,11 +52,13 @@ def get_edt(user_id):
         start_local = event.begin.astimezone(local_tz).strftime('%Y-%m-%d %H:%M')
         end_local = event.end.astimezone(local_tz).strftime('%Y-%m-%d %H:%M')
 
+        description_coupee = event.description.split('(')[0].strip() #réduire le nom du cours pour l'utilisation dans le chatbot
+        nom_coupee = event.name.split('(')[0].strip() #réduire le nom du cours pour l'utilisation dans le chatbot
         cours.append({
-            "nom_cours": event.name,
+            "nom_cours": nom_coupee,
             "début": start_local,
             "fin": end_local,
-            "description": event.description
+            "description": description_coupee
         })
 
     return cours

@@ -1,49 +1,14 @@
-from datetime import datetime
 import streamlit as st
 import os
 from openai import OpenAI
 from dotenv import load_dotenv
-import requests
-from ics import Calendar
-import pytz
 from streamlit_calendar import calendar
+from scrap_edt import get_edt
+from faiss_handler import transform_to_documents,save_to_faiss
 
 load_dotenv()
 
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY4"))
-
-# Fonction pour récupérer l'EDT depuis l'URL ICS
-def get_edt(user_id):
-    ics_url = f"http://applis.univ-nc.nc/cgi-bin/WebObjects/EdtWeb.woa/2/wa/default?login={user_id}%2Fical"
-    response = requests.get(ics_url)
-
-    # S'assurer de l'encodage UTF-8
-    response.encoding = "UTF-8"
-    
-    if response.ok:
-        ics_content = response.text
-    else:
-        raise Exception("Veuillez entrer un identifiant valide 🚫")
-
-    cal = Calendar(ics_content)
-    cours = []
-
-    local_tz = pytz.timezone("Pacific/Noumea")
-
-    for event in cal.events:
-        start_local = event.begin.astimezone(local_tz).strftime('%Y-%m-%d %H:%M')
-        end_local = event.end.astimezone(local_tz).strftime('%Y-%m-%d %H:%M')
-
-        description_coupee = event.description.split('(')[0].strip() #réduire le nom du cours pour l'utilisation dans le chatbot
-        nom_coupee = event.name.split('(')[0].strip() #réduire le nom du cours pour l'utilisation dans le chatbot
-        cours.append({
-            "nom_cours": nom_coupee,
-            "début": start_local,
-            "fin": end_local,
-            "description": description_coupee
-        })
-    # print(cours)
-    return cours
+client = OpenAI(api_key=os.getenv("OPENAI_KEY"))
 
 # Fonction pour générer une réponse via OpenAI
 def generate_response(prompt):
@@ -52,6 +17,9 @@ def generate_response(prompt):
         model="gpt-4o-mini",
     )
     return chat_completion.choices[0].message.content
+
+def initialize_session_state():
+    initialize_session_state()
 
 # Fonction principale pour la page web
 def main():
@@ -150,5 +118,11 @@ def main():
         else:
             st.write("Veuillez entrer un message.")
 
+def test():
+    user_id="rcastelain"
+    data=get_edt(user_id)
+    docs=transform_to_documents(data,user_id)
+    save_to_faiss(docs)
+
 if __name__ == "__main__":
-    main()
+    test()

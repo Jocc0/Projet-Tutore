@@ -1,4 +1,3 @@
-import shutil
 from langchain.schema import Document
 from langchain_openai import OpenAIEmbeddings
 from langchain_community.vectorstores import Chroma
@@ -55,17 +54,11 @@ def save_to_chroma(documents: list[Document],collection_name="default_collection
         document (Document): un document format Lanchain
         collection_name (str): le nom de la collection. Defaults to "default_collection".
     """
-    
-    #Si existe déjà on supprime pour réinstaller (pour les tests)
-    # #! ENLEVER QUAND TEST FINITO
-    # if os.path.exists(CHROMA_PATH):
-    #     shutil.rmtree(CHROMA_PATH)
-    
-    
+
     # Initialisation du Chroma vector store avec les embeddings OpenAI, création ou chargement de la collection
     vector_store = Chroma(
         collection_name=collection_name, 
-        embedding_function=OpenAIEmbeddings(),
+        embedding_function=OpenAIEmbeddings(),y
         persist_directory=CHROMA_PATH
     )
     # Ajout des documents à la collection
