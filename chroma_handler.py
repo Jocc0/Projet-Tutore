@@ -58,7 +58,7 @@ def save_to_chroma(documents: list[Document],collection_name="default_collection
     # Initialisation du Chroma vector store avec les embeddings OpenAI, création ou chargement de la collection
     vector_store = Chroma(
         collection_name=collection_name, 
-        embedding_function=OpenAIEmbeddings(),y
+        embedding_function=OpenAIEmbeddings(),
         persist_directory=CHROMA_PATH
     )
     # Ajout des documents à la collection

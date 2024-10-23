@@ -7,8 +7,10 @@ __pycache__
 
 #Ignore les répertoires des bdd et des logs :
 chroma/
-faiss/
 logs/
 
+#ignore des fichiers de datas pour FAISS
+*.faiss
+*.pkl
 #Ignore les logs si jamais ils sont pas dans le repertoire logs
 *.log

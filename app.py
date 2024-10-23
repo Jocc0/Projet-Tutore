@@ -1,29 +1,104 @@
+from langchain_openai import ChatOpenAI
+from datetime import datetime
 import streamlit as st
 import os
-from openai import OpenAI
+import logging
 from dotenv import load_dotenv
 from streamlit_calendar import calendar
 from scrap_edt import get_edt
-from faiss_handler import transform_to_documents,save_to_faiss
-
+from faiss_handler import transform_to_documents,save_to_faiss,retrieve_documents
+from langchain.chains.conversation.memory import ConversationSummaryMemory
+from langchain.prompts import ChatPromptTemplate
+from langchain_core.messages import HumanMessage, SystemMessage
 load_dotenv()
 
-client = OpenAI(api_key=os.getenv("OPENAI_KEY"))
 
-# Fonction pour générer une réponse via OpenAI
-def generate_response(prompt):
-    chat_completion = client.chat.completions.create(
-        messages=[{"role": "user", "content": prompt}],
-        model="gpt-4o-mini",
-    )
-    return chat_completion.choices[0].message.content
+##################SETUP DES LOGS###################
+# Ensure the logs directory exists
+log_dir = "logs"
+if not os.path.exists(log_dir):
+    os.makedirs(log_dir)  # Create the directory if it doesn't exist
 
-def initialize_session_state():
-    initialize_session_state()
 
+script_name = os.path.splitext(os.path.basename(__file__))[0]
+log_file = os.path.join(log_dir, f"{script_name}.warn.log")
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler(log_file),  # Écrire dans le fichier log
+        logging.StreamHandler()  # Écrire dans la console (terminal)
+    ]
+)
+##############################################
+
+# Obtenez la date actuelle
+current_date = datetime.now().strftime("%Y-%m-%d")
+
+
+# System Prompt to define the assistant's role
+SYSTEM_PROMPT = f"""
+Aujourd'hui, nous sommes le {current_date}.
+Tu es un assistant intelligent conçu pour aider un étudiant à organiser ses révisions et à créer un emploi du temps adapté. 
+Ton rôle est d'offrir des conseils précis sur la gestion du temps, la répartition des matières, et les stratégies de révision efficaces. 
+Tu dois poser des questions pour bien comprendre les objectifs de l'étudiant, ses priorités, et ses échéances. 
+Tu es là pour l'accompagner dans ses révisions en proposant des suggestions d'amélioration et en lui fournissant des explications claires et adaptées à ses besoins.
+"""
+
+# Chat prompt template
+PROMPT_TEMPLATE = """
+Réponds à la question suivante en utilisant le contexte ci-dessous. Vérifie que les informations utilisées concordent avec les questions de l'humain, notamment les dates. Si tu n'es pas sûr de la réponse, n'hésite pas à demander des précisions.
+
+{context}
+
+---
+
+Réponds à la question en utilisant le contexte ci-dessus : {question}
+
+Exemple :
+Question : Quel est le début de mon cours de Mathématiques ?
+Réponse : Le début de votre cours de Mathématiques est le 10 janvier.
+"""
+
+
+def generate_response(querry_text, user_id):
+    
+    try:
+        # Utilisez model_name au lieu de model
+        chat_model = ChatOpenAI(model_name="gpt-4")
+        logging.info(f"Modèle initialisé")
+    except Exception as e:
+        logging.error(f"Erreur lors de l'initialisation du modèle : {repr(e)}")
+        return "Erreur lors de l'initialisation du modèle."
+
+    # Récupère les documents pertinents à partir de FAISS
+    results = retrieve_documents(querry_text, user_id, 10)
+    
+    # Concatène tous les documents récupérés pour former le contexte
+    context_text = "\n\n---\n\n".join([doc.page_content for doc in results])
+    
+    # Crée le prompt à partir du template
+    prompt_template = ChatPromptTemplate.from_template(PROMPT_TEMPLATE)
+    prompt = prompt_template.format(context=context_text, question=querry_text)
+    
+    # Ajoute le message système pour guider le comportement de l'IA
+    messages = [
+        SystemMessage(content=SYSTEM_PROMPT),
+        HumanMessage(content=prompt)
+    ]
+    
+    # Utilise le modèle de chat pour générer la réponse
+    try:
+        response = chat_model(messages=messages)
+        return response.content  # Renvoie le contenu de la réponse générée
+    except Exception as e:
+        logging.error(f"Erreur lors de la génération de la réponse: {repr(e)}")
+        return "Erreur lors de la génération de la réponse."
+    
 # Fonction principale pour la page web
 def main():
-
+        
     st.title("Chatbot🤖")
 
     user_id = st.text_input("Entrez votre identifiant: ", "")
@@ -37,6 +112,12 @@ def main():
                 cours = get_edt(user_id)
                 st.session_state.edt = cours
                 st.success("Identifiant validé ! Voici votre emploi du temps :")
+                
+                #Envoie et embeding des informations de l'utilisateur
+                data=get_edt(user_id)
+                docs=transform_to_documents(data,user_id)
+                save_to_faiss(docs)
+                
             except Exception as e:
                 st.error(str(e))
         else:
@@ -113,7 +194,7 @@ def main():
     if st.button("Envoyer"):
         if user_input:
             st.write(f"Vous: {user_input}")
-            bot_response = generate_response(user_input)
+            bot_response = generate_response(user_input,user_id)
             st.write(f"Chatbot: {bot_response}")
         else:
             st.write("Veuillez entrer un message.")
@@ -123,6 +204,9 @@ def test():
     data=get_edt(user_id)
     docs=transform_to_documents(data,user_id)
     save_to_faiss(docs)
+    results=retrieve_documents("Quels sont les cours pour la semaine du 21 au 27 octobre",user_id)
+    for res,score in results:
+        print(f"* [SIM={score:3f}] {res.page_content} [{res.metadata}]")
 
 if __name__ == "__main__":
-    test()
+    main()
