@@ -5,8 +5,8 @@ import os
 import logging
 from dotenv import load_dotenv
 from streamlit_calendar import calendar
-from scrap_edt import get_edt
-from faiss_handler import transform_to_documents,save_to_faiss,retrieve_documents
+from scrap_edt import get_edt,get_edt_semaine
+from faiss_handler import transform_to_documents,save_to_faiss,retrieve_documents,transform_weeks_to_documents
 from langchain.chains.conversation.memory import ConversationSummaryMemory
 from langchain.prompts import ChatPromptTemplate
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -40,6 +40,7 @@ current_date = datetime.now().strftime("%Y-%m-%d")
 # System Prompt to define the assistant's role
 SYSTEM_PROMPT = f"""
 Aujourd'hui, nous sommes le {current_date}.
+
 Tu es un assistant intelligent conçu pour aider un étudiant à organiser ses révisions et à créer un emploi du temps adapté. 
 Ton rôle est d'offrir des conseils précis sur la gestion du temps, la répartition des matières, et les stratégies de révision efficaces. 
 Tu dois poser des questions pour bien comprendre les objectifs de l'étudiant, ses priorités, et ses échéances. 
@@ -48,7 +49,7 @@ Tu es là pour l'accompagner dans ses révisions en proposant des suggestions d'
 
 # Chat prompt template
 PROMPT_TEMPLATE = """
-Réponds à la question suivante en utilisant le contexte ci-dessous. Vérifie que les informations utilisées concordent avec les questions de l'humain, notamment les dates. Si tu n'es pas sûr de la réponse, n'hésite pas à demander des précisions.
+Réponds à la question suivante en utilisant le contexte ci-dessous. Vérifie que les informations utilisées concordent avec les questions de l'humain. Si tu n'es pas sûr de la réponse, n'hésite pas à demander des précisions.
 
 {context}
 
@@ -60,7 +61,11 @@ Exemple :
 Question : Quel est le début de mon cours de Mathématiques ?
 Réponse : Le début de votre cours de Mathématiques est le 10 janvier.
 """
-
+    
+def save_user_edt_to_faiss(user_id):
+    data=get_edt_semaine(user_id)
+    docs=transform_weeks_to_documents(data,user_id)
+    save_to_faiss(docs)
 
 def generate_response(querry_text, user_id):
     
@@ -73,7 +78,7 @@ def generate_response(querry_text, user_id):
         return "Erreur lors de l'initialisation du modèle."
 
     # Récupère les documents pertinents à partir de FAISS
-    results = retrieve_documents(querry_text, user_id, 10)
+    results = retrieve_documents(querry_text, user_id, 30)
     
     # Concatène tous les documents récupérés pour former le contexte
     context_text = "\n\n---\n\n".join([doc.page_content for doc in results])
@@ -205,8 +210,7 @@ def test():
     docs=transform_to_documents(data,user_id)
     save_to_faiss(docs)
     results=retrieve_documents("Quels sont les cours pour la semaine du 21 au 27 octobre",user_id)
-    for res,score in results:
-        print(f"* [SIM={score:3f}] {res.page_content} [{res.metadata}]")
+    print(results)
 
 if __name__ == "__main__":
     main()
