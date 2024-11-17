@@ -86,7 +86,7 @@ Identifier des créneaux de réunion où les deux étudiants sont disponibles en
 5. **Visualisation claire :** Fournir un tableau ou une liste structurée des disponibilités communes, triées par jour.
 
 #### **Résultat attendu :**
-Un tableau clair et structuré des créneaux disponibles, organisé par jour de la semaine, qui facilite la sélection des meilleurs moments pour une réunion.
+Un tableau clair et structuré des créneaux disponibles respectant la duré de 1 heure à 2heures maximum, organisé et qui facilite la sélection des meilleurs moments pour une réunion.
 """
 
 
