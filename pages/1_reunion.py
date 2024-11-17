@@ -51,35 +51,42 @@ current_date = datetime.now().strftime("%Y-%m-%d")
 SYSTEM_PROMPT = f"""
 Aujourd'hui, nous sommes le {current_date}({current_date_noumea}).
 
-Tu es un assistant intelligent conçu pour aider un étudiant à organiser ses révisions et à créer un emploi du temps adapté.
+Tu es un assistant intelligent conçu pour aider un Etudiant à organiser ses révisions et à créer un emploi du temps adapté.
 Ton rôle est d'offrir des conseils précis sur la gestion du temps. 
 **Présente le planning final sous forme de tableau pour faciliter la lecture.**
 """
 
 
 PROMPT_TEMPLATE_REUNION="""
-Voici les emplois du temps des deux utilisateurs avec leurs cours et leurs horaires.
-Les utilisateurs souhaitent organiser des réunions entre le {start_date} et le {end_date}.
+Vous avez les emplois du temps de deux étudiants détaillant leurs cours et leurs horaires. Ils souhaitent planifier des réunions communes entre le {start_date} et le {end_date}.
 
+#### **Données des étudiants :**
 
-Utilisateur 1 :
+- **Etudiant 1 :**  
 {edt1}
 
-------
-
-Utilisateur 2:
+- **Etudiant 2 :**  
 {edt2}
 
-------
-Objectif :
-Le but est de trouver des créneaux de réunion où les deux utilisateurs sont disponibles en dehors de leurs horaires de cours. Les créneaux proposés doivent être d’une durée comprise entre 1 à 2 heures.
+#### **Objectif :**
+Identifier des créneaux de réunion où les deux étudiants sont disponibles en dehors de leurs cours, en respectant les contraintes suivantes :
+1. **Durée des créneaux :** Chaque créneau doit **toujours** durer entre 1 heure et 2 heures .  
+2. **Non-chevauchement :** Les créneaux proposés ne doivent pas empiéter sur les horaires des cours.  
+3. **Période de la journée :** Les créneaux doivent être situés entre 07:00 et 18:00. Aucun créneau ne doit être proposé en dehors de cette plage horaire.  
+4. **Optimisation :** Maximiser les périodes communes disponibles pour faciliter la réunion.
 
-Méthodologie :
-Éviter les chevauchements avec les horaires de cours.
-Proposer des créneaux de réunion en tenant compte des périodes disponibles de chaque utilisateur. Par exemple, si l'Utilisateur 1 a un créneau libre de 10:00 à 14:00, et l'Utilisateur 2 a un créneau libre de 11:00 à 15:00, le créneau commun disponible est de 11:00 à 14:00.
-Respecter les contraintes : Assurer que la durée des créneaux soit d’au moins 1 heure et au maximum 2 heures.
-Organiser les créneaux par jour de la semaine et proposer les meilleurs moments pour une réunion.
-Le résultat attendu est un planning visuel ou un tableau des disponibilités communes entre les deux utilisateurs.
+#### **Méthodologie :**
+1. **Assomption par défaut :** Si rien dans le contexte n'est précisé concernant une horraire, considérer que l'Etudiant est entièrement disponible sur la plage horaire définie (08:00 à 18:00).  
+2. **Fusion des disponibilités :** Identifier les périodes communes en croisant les plages horaires libres des deux étudiants. Par exemple, si :
+   - Etudiant 1 est libre de 10h00 à 14h00
+   - Etudiant 2 est libre de 11h00 à 15h00  
+   Le créneau commun serait de 11h00 à 14h00.  
+3. **Organisation par jour :** Proposer les créneaux , en respectant la durée minimale et maximale des réunions.  
+4. **Respect des horaires :** Limiter les suggestions aux heures comprises entre 08:00 et 18:00. Ignorer toute disponibilité en dehors de cette plage horaire.  
+5. **Visualisation claire :** Fournir un tableau ou une liste structurée des disponibilités communes, triées par jour.
+
+#### **Résultat attendu :**
+Un tableau clair et structuré des créneaux disponibles, organisé par jour de la semaine, qui facilite la sélection des meilleurs moments pour une réunion.
 """
 
 
@@ -97,7 +104,7 @@ def generate_planning_for_2(querry_text,main_user,second_user,list_of_dates):
     st.write("Génération des fichiers ...")
 
     remove_data("faiss_data")
-    #Création données pour les deux utilisateurs avec l'embeding et tout le tralala
+    #Création données pour les deux étudiants avec l'embeding et tout le tralala
     st.write(f"Génération pour {main_user}")
     load_and_save_to_faiss_json(main_user)
     st.write(f"Génération pour {second_user}")
@@ -133,7 +140,7 @@ st.set_page_config(page_title="Réunion", page_icon="📅")
 
 st.markdown("# Réunion")
 st.write(
-    """Création de réunion avec d'autres utilisateurs"""
+    """Création de réunion avec d'autres étudiants"""
 )
 
 
@@ -159,7 +166,6 @@ if date_fin >= date_debut:
 # Bouton pour valider les entrées
 if st.button("Création du planning"):
     # Appel de la fonction avec les entrées
-    st.write(liste_dates)
     with st.status("Génération de la réponse...", expanded=True) as status:
         resultat = generate_planning_for_2(f"Cours entre date_debut : {date_debut}  date_fin : {date_fin}",user_id1, user_id2, liste_dates)
 
