@@ -8,8 +8,6 @@ import streamlit as st
 import os
 import logging
 from dotenv import load_dotenv
-from scrap_edt import get_edt_semaine_json
-from faiss_handler import save_to_faiss,json_to_documents
 from langchain.prompts import ChatPromptTemplate
 from langchain_core.messages import HumanMessage, SystemMessage
 from tools import fetch_and_concatenate_documents, load_and_save_to_faiss_json, remove_data
@@ -37,6 +35,7 @@ logging.basicConfig(
     ]
 )
 ##############################################
+
 # Définir la langue en français
 locale.setlocale(locale.LC_TIME, "fr_FR")
 
@@ -122,7 +121,7 @@ def generate_planning_for_2(querry_text,main_user,second_user,list_of_dates):
     # Utilise le modèle de chat pour générer la réponse
     st.write("Génération de la réponse")
     try:
-        st.write(messages)
+        st.write(messages[1])
         response = chat_model(messages=messages)
         status.update(label="Download complete!", state="complete", expanded=False )
         return response.content  # Renvoie le contenu de la réponse générée
@@ -160,6 +159,7 @@ if date_fin >= date_debut:
 # Bouton pour valider les entrées
 if st.button("Création du planning"):
     # Appel de la fonction avec les entrées
+    st.write(liste_dates)
     with st.status("Génération de la réponse...", expanded=True) as status:
         resultat = generate_planning_for_2(f"Cours entre date_debut : {date_debut}  date_fin : {date_fin}",user_id1, user_id2, liste_dates)
 
