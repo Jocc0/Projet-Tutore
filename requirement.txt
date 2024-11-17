@@ -9,3 +9,6 @@ faiss-cpu
 openai
 langchain
 langchain-text-splitters
+kerias
+tensorflow
+transformers
