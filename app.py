@@ -12,7 +12,6 @@ from langchain.prompts import ChatPromptTemplate
 from langchain_core.messages import HumanMessage, SystemMessage
 load_dotenv()
 
-
 ##################SETUP DES LOGS###################
 # Ensure the logs directory exists
 log_dir = "logs"
@@ -71,7 +70,7 @@ def generate_response(querry_text, user_id):
     
     try:
         # Utilisez model_name au lieu de model
-        chat_model = ChatOpenAI(model_name="gpt-4")
+        chat_model = ChatOpenAI(model_name="gpt-4o-mini")
         logging.info(f"Modèle initialisé")
     except Exception as e:
         logging.error(f"Erreur lors de l'initialisation du modèle : {repr(e)}")
@@ -103,7 +102,7 @@ def generate_response(querry_text, user_id):
     
 # Fonction principale pour la page web
 def main():
-        
+
     st.title("Chatbot🤖")
 
     user_id = st.text_input("Entrez votre identifiant: ", "")
@@ -194,15 +193,33 @@ def main():
     """
     )
 
-    # Interaction avec le chatbot
-    user_input = st.text_input("Vous: ", "")
-    if st.button("Envoyer"):
-        if user_input:
-            st.write(f"Vous: {user_input}")
-            bot_response = generate_response(user_input,user_id)
-            st.write(f"Chatbot: {bot_response}")
-        else:
-            st.write("Veuillez entrer un message.")
+    st.title("Chat :")
+    # Initialize chat history
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
+
+    # Display chat messages from history on app rerun
+    for message in st.session_state.messages:
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
+
+    # React to user input
+    if prompt := st.chat_input("What is up?"):
+        # Display user message in chat message container
+        st.chat_message("user").markdown(prompt)
+        # Add user message to chat history
+        st.session_state.messages.append({"role": "user", "content": prompt})
+
+        # Here you would typically generate a response from your AI model
+        response = generate_response(prompt,user_id)
+
+        # Display assistant response in chat message container
+        with st.chat_message("assistant"):
+            st.markdown(response)
+        # Add assistant response to chat history
+        st.session_state.messages.append({"role": "assistant", "content": response})
+
+
 
 def test():
     user_id="rcastelain"

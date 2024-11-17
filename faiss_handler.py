@@ -1,12 +1,11 @@
+from datetime import datetime
 from dotenv import load_dotenv
 import faiss
 from langchain_community.docstore.in_memory import InMemoryDocstore
 from langchain_community.vectorstores import FAISS
 from langchain_openai import OpenAIEmbeddings
 from langchain_core.documents import Document
-
-#!Utiliser ça pour taleur
-from langchain.text_splitter import RecursiveJsonSplitter
+from langchain_community.document_loaders import JSONLoader
 import logging
 import os
 
@@ -56,49 +55,34 @@ try:
 except Exception as e:
     logging.error(f"Erreur dans l'initialisation du modèle: {repr(e)}")
 
+# Permet à la fonction metadata_func d'avoir acces à la variable user_id
+def create_metadata_func(user_id):
+    def metadata_func(record: dict, metadata: dict) -> dict:
+        logging.info("Ajout des métadonnées")
+        # Extract the start date from the record
+        start_date_str = record.get('début')
+        if start_date_str:
+            start_date = datetime.strptime(start_date_str, "%Y-%m-%d %H:%M")
+            metadata['date'] = start_date.date().isoformat()  # Store the date in ISO format
+        metadata['user_id'] = user_id
+        metadata['source'] = f"http://applis.univ-nc.nc/cgi-bin/WebObjects/EdtWeb.woa/2/wa/default?login={user_id}%2Fical"
+        return metadata
+    return metadata_func
 
-def json_to_documents(cours_data,user_id):
-    emploi_du_temps = json.load(cours_data)["emploi_du_temps"]
+def json_to_documents(user_id):
+    logging.info("Création du JSONLoader")
+    loader = JSONLoader(
+        file_path=f'{JSON_PATH}/{user_id}_edt.json',
+        jq_schema=".emploi_du_temps[].evenements[]",
+        metadata_func=create_metadata_func(user_id),  # Utilise la fonction métadata pour ajouter les métadonnées
+        text_content=False
+        )
+    logging.info("Chargement des données JSON")
+    documents = loader.load()
+    # Ajoute des métadonnées à chaque document
 
+    return documents
 
-def transform_to_documents(cours_data, user_id):
-    """
-    Cette fonction va transformer les données de cours (retourné par get_edt)
-    en un Document du format Langchain qui pourra être utilisé par FAISS.
-    
-    Args:
-        cours_data (List): de la forme :
-        [{
-            "nom_cours": nom_coupee,
-            "début": start_local,
-            "fin": end_local,
-            "description": description_coupee
-        },...]
-        
-        user_id (str): l'id de la personne à qui appartiennent ces données
-
-    Returns:
-        Document: un document au format Langchain
-    """
-    documents = []  # Liste pour mettre tous les cours
-    content = ""
-
-    try:
-        logging.info(f"Traitement de {len(cours_data)} cours.")
-        for cours in cours_data:
-            content = (
-                f"Nom du cours: {cours['nom_cours']}\n"
-                f"Début du cours: {cours['début']}\n"
-                f"Fin du cours: {cours['fin']}\n"
-                f"Description du cours: {cours['description']}\n\n"
-            )
-            documents.append(Document(page_content=content, metadata={"user_id": user_id,
-                                                                     "source": f"http://applis.univ-nc.nc/cgi-bin/WebObjects/EdtWeb.woa/2/wa/default?login={user_id}%2Fical"}))
-        return documents
-    except Exception as e:
-        logging.error(f"Erreur lors de la transformation des données en documents : {repr(e)}")
-        return []  # Retourner une liste vide en cas d'erreur
-    
 def load_faiss_vector_store():
     """
     Charge le vector store FAISS à partir du chemin spécifié.
@@ -118,13 +102,13 @@ def load_faiss_vector_store():
         logging.info(f"Aucun index FAISS trouvé à {FAISS_PATH}")
         return None
 
-def retrieve_documents(querry_text, user_id, top_k=1):
+def retrieve_documents(querry_text,filter_criteria, user_id, top_k=1):
     vector_store = load_faiss_vector_store()  # Charger le vector store ici
     if vector_store:
         try:
             # On recherche dans le vector store FAISS
             results = vector_store.similarity_search(
-                querry_text, k=top_k, filter={"user_id": user_id}
+                querry_text,fetch_k=1000000 ,k=top_k, filter=filter_criteria
             )
             if results is not None:
                 logging.info(f"{len(results)}informations intéressante trouvée pour {user_id}")
@@ -134,26 +118,6 @@ def retrieve_documents(querry_text, user_id, top_k=1):
         except Exception as e:
             logging.info(f"Erreur lors de la recherche de données : {repr(e)}")
     return None
-
-def retrive_documents_score(querry_text,user_id,top_k=3):
-    vector_store = load_faiss_vector_store()  # Charger le vector store ici
-    if vector_store:
-        try:
-            # On recherche dans le vector store FAISS
-            results = vector_store.similarity_search_with_relevance_scores(
-                querry_text, k=top_k, filter={"user_id": user_id}
-            )
-            if results is not None:
-                logging.info(f"{len(results)}informations intéressante trouvée pour {user_id}")
-                return results
-            else:
-                logging.info("Aucune information intéressante trouvée")
-        except Exception as e:
-            logging.info(f"Erreur lors de la recherche de données : {repr(e)}")
-    return None
-
-
-
 
 def save_to_faiss(documents: list[Document]):
     """
@@ -181,50 +145,9 @@ def save_to_faiss(documents: list[Document]):
         logging.error(f"Erreur lors de la création de l'index FAISS : {repr(e)}")
     try:
         vector_store.add_documents(documents=documents)
+        logging.info(f"Ajout de {len(documents)} documents dans {FAISS_PATH}")
         vector_store.save_local(FAISS_PATH)
-        logging.info(f"Sauvegardé {len(documents)} documents dans {FAISS_PATH}")
+        logging.info(f"Vectors store sauvegardé localement dans {FAISS_PATH} ")
+        
     except Exception as e:
         logging.error(f"Erreur lors de la sauvegarde des documents dans FAISS : {repr(e)}")
-
-
-
-def transform_weeks_to_documents(cours_data, user_id):
-    """
-    Cette fonction va transformer les données de cours (retourné par get_edt)
-    en un Document du format Langchain qui pourra être utilisé par FAISS.
-    
-    Args:
-        cours_data (List): de la forme :
-        [{
-            "nom_cours": nom_coupee,
-            "début": start_local,
-            "fin": end_local,
-            "description": description_coupee
-        },...]
-        
-        user_id (str): l'id de la personne à qui appartiennent ces données
-
-    Returns:
-        Document: un document au format Langchain
-    """
-    documents = []  # Liste pour mettre tous les cours
-    content = ""
-
-    try:
-        logging.info(f"Traitement des cours.")
-        for semaine in cours_data:
-            content=""
-            for cours in semaine:
-                content += (
-                    f"Nom du cours: {cours['nom_cours']}\n"
-                    f"Début du cours: {cours['début']}\n"
-                    f"Fin du cours: {cours['fin']}\n"
-                    f"Description du cours: {cours['description']}\n\n"
-                )
-            documents.append(Document(page_content=content, metadata={"user_id": user_id,"source": f"http://applis.univ-nc.nc/cgi-bin/WebObjects/EdtWeb.woa/2/wa/default?login={user_id}%2Fical"}))
-            logging.info(f"Documents de {len(content)}caractères créés pour l'utilisateur {user_id}")
-        return documents
-    except Exception as e:
-        logging.error(f"Erreur lors de la transformation des données en documents : {repr(e)}")
-        return []  # Retourner une liste vide en cas d'erreur
-    
