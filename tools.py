@@ -1,5 +1,32 @@
 import logging
-from faiss_handler import retrieve_documents
+import os
+import shutil
+from faiss_handler import json_to_documents, retrieve_documents, save_to_faiss
+from scrap_edt import get_edt_semaine_json
+
+
+def load_and_save_to_faiss_json(user_id):
+    get_edt_semaine_json(user_id)
+    docs=json_to_documents(user_id)
+    save_to_faiss(docs)
+
+def remove_data(file_path):
+    if os.path.exists(file_path) and os.path.isdir(file_path):
+        try:
+            for file_name in os.listdir(file_path):
+                file_path = os.path.join(file_path, file_name)
+                # Check if it is a file before deleting
+                if os.path.isfile(file_path):
+                    os.remove(file_path)
+                    print(f"Removed file: {file_path}")
+                # Optionally handle subfolders (comment out if not needed)
+                elif os.path.isdir(file_path):
+                    shutil.rmtree(file_path)
+                    print(f"Removed file_path: {file_path}")
+        except Exception as e:
+                print(f"An error occurred while clearing the file_path: {e}")
+    else:
+        print(f"The file_path '{file_path}' does not exist.")
 
 
 def filter_data_userId(list_of_dates,user_id)->dict:
@@ -31,7 +58,7 @@ def fetch_and_concatenate_documents(query_text, list_of_dates, user_id, top_k=65
                 logging.info(f"Document récupéré pour {user_id}: \n {doc.page_content}")
             
             # Concaténation des documents pour former le contexte
-            context = "\n\n---\n\n".join([doc.page_content for doc in edt])
+            context = "\n\n".join([doc.page_content for doc in edt])
             logging.info(f"Contexte final pour {user_id}: \n {context}")
             
             return context

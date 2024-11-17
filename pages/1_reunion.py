@@ -12,7 +12,7 @@ from scrap_edt import get_edt_semaine_json
 from faiss_handler import save_to_faiss,json_to_documents
 from langchain.prompts import ChatPromptTemplate
 from langchain_core.messages import HumanMessage, SystemMessage
-from tools import fetch_and_concatenate_documents
+from tools import fetch_and_concatenate_documents, load_and_save_to_faiss_json, remove_data
 
 
 load_dotenv()
@@ -83,10 +83,6 @@ Organiser les créneaux par jour de la semaine et proposer les meilleurs moments
 Le résultat attendu est un planning visuel ou un tableau des disponibilités communes entre les deux utilisateurs.
 """
 
-def load_and_save_to_faiss_json(user_id):
-    get_edt_semaine_json(user_id)
-    docs=json_to_documents(user_id)
-    save_to_faiss(docs)
 
 
 def generate_planning_for_2(querry_text,main_user,second_user,list_of_dates):
@@ -100,24 +96,8 @@ def generate_planning_for_2(querry_text,main_user,second_user,list_of_dates):
 
     #On supprime parce que j'arrive pas trop à gérer les doublons for now
     st.write("Génération des fichiers ...")
-    folder="faiss_data"
-    if os.path.exists(folder) and os.path.isdir(folder):
-        try:
-            for file_name in os.listdir(folder):
-                file_path = os.path.join(folder, file_name)
-                # Check if it is a file before deleting
-                if os.path.isfile(file_path):
-                    os.remove(file_path)
-                    print(f"Removed file: {file_path}")
-                # Optionally handle subfolders (comment out if not needed)
-                elif os.path.isdir(file_path):
-                    shutil.rmtree(file_path)
-                    print(f"Removed folder: {file_path}")
-        except Exception as e:
-            print(f"An error occurred while clearing the folder: {e}")
-    else:
-        print(f"The folder '{folder}' does not exist.")
 
+    remove_data("faiss_data")
     #Création données pour les deux utilisateurs avec l'embeding et tout le tralala
     st.write(f"Génération pour {main_user}")
     load_and_save_to_faiss_json(main_user)

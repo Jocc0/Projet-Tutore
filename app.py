@@ -1,15 +1,14 @@
 from langchain_openai import ChatOpenAI
-from datetime import datetime
+from datetime import datetime, timedelta
 import streamlit as st
 import os
 import logging
 from dotenv import load_dotenv
 from streamlit_calendar import calendar
-from scrap_edt import get_edt,get_edt_semaine
-from faiss_handler import transform_to_documents,save_to_faiss,retrieve_documents,transform_weeks_to_documents
-from langchain.chains.conversation.memory import ConversationSummaryMemory
+from scrap_edt import get_edt
 from langchain.prompts import ChatPromptTemplate
 from langchain_core.messages import HumanMessage, SystemMessage
+from tools import load_and_save_to_faiss_json,fetch_and_concatenate_documents
 load_dotenv()
 
 ##################SETUP DES LOGS###################
@@ -61,12 +60,8 @@ Question : Quel est le début de mon cours de Mathématiques ?
 Réponse : Le début de votre cours de Mathématiques est le 10 janvier.
 """
     
-def save_user_edt_to_faiss(user_id):
-    data=get_edt_semaine(user_id)
-    docs=transform_weeks_to_documents(data,user_id)
-    save_to_faiss(docs)
 
-def generate_response(querry_text, user_id):
+def generate_response(querry_text, user_id,list_of_dates):
     
     try:
         # Utilisez model_name au lieu de model
@@ -77,21 +72,18 @@ def generate_response(querry_text, user_id):
         return "Erreur lors de l'initialisation du modèle."
 
     # Récupère les documents pertinents à partir de FAISS
-    results = retrieve_documents(querry_text, user_id, 30)
-    
-    # Concatène tous les documents récupérés pour former le contexte
-    context_text = "\n\n---\n\n".join([doc.page_content for doc in results])
-    
+    context=fetch_and_concatenate_documents(querry_text,user_id=user_id,list_of_dates=list_of_dates,top_k=25)
+    st.write(context)
     # Crée le prompt à partir du template
     prompt_template = ChatPromptTemplate.from_template(PROMPT_TEMPLATE)
-    prompt = prompt_template.format(context=context_text, question=querry_text)
+    prompt = prompt_template.format(context=context, question=querry_text)
     
     # Ajoute le message système pour guider le comportement de l'IA
     messages = [
         SystemMessage(content=SYSTEM_PROMPT),
         HumanMessage(content=prompt)
     ]
-    
+
     # Utilise le modèle de chat pour générer la réponse
     try:
         response = chat_model(messages=messages)
@@ -116,11 +108,7 @@ def main():
                 cours = get_edt(user_id)
                 st.session_state.edt = cours
                 st.success("Identifiant validé ! Voici votre emploi du temps :")
-                
-                #Envoie et embeding des informations de l'utilisateur
-                data=get_edt(user_id)
-                docs=transform_to_documents(data,user_id)
-                save_to_faiss(docs)
+                load_and_save_to_faiss_json()
                 
             except Exception as e:
                 st.error(str(e))
@@ -203,15 +191,36 @@ def main():
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
 
+    st.write("Planifiez vos révisions (maximum 1 semaine) :")
+
+    # Sélection de la date de début
+    date_debut = st.date_input("Choisissez une date de début :")
+
+    # Calcul de la date de fin maximale (7 jours après la date de début)
+    date_fin_max = date_debut + timedelta(weeks=1)
+
+    # Sélection de la date de fin
+    date_fin = st.date_input(
+        "Choisissez une date de fin (dans la semaine suivant la date de début) :",
+        min_value=date_debut, 
+        max_value=date_fin_max
+    )
+    # Générer une liste de dates entre date_debut et date_fin pour les utiliser dans la recherche
+    if date_fin >= date_debut:  
+        liste_dates = [
+            (date_debut + timedelta(days=i)).isoformat()
+            for i in range((date_fin - date_debut).days + 1)
+        ]
+    
     # React to user input
-    if prompt := st.chat_input("What is up?"):
+    if prompt := st.chat_input("Quand devrais-je réviser?"):
         # Display user message in chat message container
         st.chat_message("user").markdown(prompt)
         # Add user message to chat history
         st.session_state.messages.append({"role": "user", "content": prompt})
 
         # Here you would typically generate a response from your AI model
-        response = generate_response(prompt,user_id)
+        response = generate_response(prompt,list_of_dates=liste_dates,user_id=user_id)
 
         # Display assistant response in chat message container
         with st.chat_message("assistant"):
@@ -220,14 +229,6 @@ def main():
         st.session_state.messages.append({"role": "assistant", "content": response})
 
 
-
-def test():
-    user_id="rcastelain"
-    data=get_edt(user_id)
-    docs=transform_to_documents(data,user_id)
-    save_to_faiss(docs)
-    results=retrieve_documents("Quels sont les cours pour la semaine du 21 au 27 octobre",user_id)
-    print(results)
 
 if __name__ == "__main__":
     main()
