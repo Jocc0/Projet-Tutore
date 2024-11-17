@@ -1,18 +1,18 @@
 import locale
+import shutil
 import pytz
 import streamlit as st
 from langchain_openai import ChatOpenAI
-from datetime import date, datetime, timedelta
+from datetime import datetime, timedelta
 import streamlit as st
 import os
 import logging
 from dotenv import load_dotenv
-from streamlit_calendar import calendar
-from scrap_edt import get_edt_semaine
-from faiss_handler import transform_to_documents,save_to_faiss,retrieve_documents,retrive_documents_score,transform_weeks_to_documents
-from langchain.chains.conversation.memory import ConversationSummaryMemory
 from langchain.prompts import ChatPromptTemplate
 from langchain_core.messages import HumanMessage, SystemMessage
+from tools import fetch_and_concatenate_documents, load_and_save_to_faiss_json, remove_data
+
+
 load_dotenv()
 
 
@@ -35,6 +35,7 @@ logging.basicConfig(
     ]
 )
 ##############################################
+
 # Définir la langue en français
 locale.setlocale(locale.LC_TIME, "fr_FR")
 
@@ -50,41 +51,47 @@ current_date = datetime.now().strftime("%Y-%m-%d")
 SYSTEM_PROMPT = f"""
 Aujourd'hui, nous sommes le {current_date}({current_date_noumea}).
 
-Tu es un assistant intelligent conçu pour aider un étudiant à organiser ses révisions et à créer un emploi du temps adapté.
-
-Ton rôle est d'offrir des conseils précis sur la gestion du temps, la répartition des matières, et les stratégies de révision efficaces. 
-Tu dois poser des questions pour bien comprendre les objectifs de l'étudiant, ses priorités, et ses échéances. 
-Tu es là pour l'accompagner dans ses révisions en proposant des suggestions d'amélioration et en lui fournissant des explications claires et adaptées à ses besoins.
+Tu es un assistant intelligent conçu pour aider un Etudiant à organiser ses révisions et à créer un emploi du temps adapté.
+Ton rôle est d'offrir des conseils précis sur la gestion du temps. 
 **Présente le planning final sous forme de tableau pour faciliter la lecture.**
 """
 
 
 PROMPT_TEMPLATE_REUNION="""
-Voici les emplois du temps des deux utilisateurs avec leurs cours et leurs horaires.
+Vous avez les emplois du temps de deux étudiants détaillant leurs cours et leurs horaires. Ils souhaitent planifier des réunions communes entre le {start_date} et le {end_date}.
 
+#### **Données des étudiants :**
 
-Utilisateur 1 :
+- **Etudiant 1 :**  
 {edt1}
 
-------
-
-Utilisateur 2:
+- **Etudiant 2 :**  
 {edt2}
 
-------
+#### **Objectif :**
+Identifier des créneaux de réunion où les deux étudiants sont disponibles en dehors de leurs cours, en respectant les contraintes suivantes :
+1. **Durée des créneaux :** Chaque créneau doit **toujours** durer entre 1 heure et 2 heures .  
+2. **Non-chevauchement :** Les créneaux proposés ne doivent pas empiéter sur les horaires des cours.  
+3. **Période de la journée :** Les créneaux doivent être situés entre 07:00 et 18:00. Aucun créneau ne doit être proposé en dehors de cette plage horaire.  
+4. **Optimisation :** Maximiser les périodes communes disponibles pour faciliter la réunion.
 
-Crée un planning de disponibilités partagées pour permettre aux deux utilisateurs de trouver des créneaux libres pour se rencontrer en dehors de leurs heures de cours. 
-Identifie les créneaux de disponibilité simultanée en tenant compte des horaires de cours de chacun et propose des créneaux adaptés pour des réunions de travail sur leur projet tutoré.
-Donne aussi un bref sommaire des cours des deux utilisateurs
+#### **Méthodologie :**
+1. **Assomption par défaut :** Si rien dans le contexte n'est précisé concernant une horraire, considérer que l'Etudiant est entièrement disponible sur la plage horaire définie (08:00 à 18:00).  
+2. **Fusion des disponibilités :** Identifier les périodes communes en croisant les plages horaires libres des deux étudiants. Par exemple, si :
+   - Etudiant 1 est libre de 10h00 à 14h00
+   - Etudiant 2 est libre de 11h00 à 15h00  
+   Le créneau commun serait de 11h00 à 14h00.  
+3. **Organisation par jour :** Proposer les créneaux , en respectant la durée minimale et maximale des réunions.  
+4. **Respect des horaires :** Limiter les suggestions aux heures comprises entre 08:00 et 18:00. Ignorer toute disponibilité en dehors de cette plage horaire.  
+5. **Visualisation claire :** Fournir un tableau ou une liste structurée des disponibilités communes, triées par jour.
 
-Assure-toi de respecter ces consignes :
-
-Évite les chevauchements avec les heures de cours.
-Propose des créneaux raisonnables en termes de durée, en priorisant des créneaux d'une à deux heures.
-Le résultat attendu est un planning visuel ou un tableau des disponibilités communes entre les deux utilisateurs.
+#### **Résultat attendu :**
+Un tableau clair et structuré des créneaux disponibles respectant la duré de 1 heure à 2heures maximum, organisé et qui facilite la sélection des meilleurs moments pour une réunion.
 """
 
-def generate_planning_for_2(querry_text,main_user,second_user):
+
+
+def generate_planning_for_2(querry_text,main_user,second_user,list_of_dates):
     try:
         # Utilisez model_name au lieu de model
         chat_model = ChatOpenAI(model_name="gpt-4o-mini")
@@ -93,27 +100,24 @@ def generate_planning_for_2(querry_text,main_user,second_user):
         logging.error(f"Erreur lors de l'initialisation du modèle : {repr(e)}")
         return "Erreur lors de l'initialisation du modèle."
 
+    #On supprime parce que j'arrive pas trop à gérer les doublons for now
+    st.write("Génération des fichiers ...")
 
-    #Création données 2ème utilisateur
-    data_second_user=get_edt_semaine(second_user)
-    docs=transform_weeks_to_documents(data_second_user,second_user)
-    save_to_faiss(docs)
-    
+    remove_data("faiss_data")
+    #Création données pour les deux étudiants avec l'embeding et tout le tralala
+    st.write(f"Génération pour {main_user}")
+    load_and_save_to_faiss_json(main_user)
+    st.write(f"Génération pour {second_user}")
+    load_and_save_to_faiss_json(second_user)
 
-    # Récupère les documents pertinents à partir de FAISS
-    edt_main_user = retrieve_documents(querry_text, main_user, 2)
-    # Concatène tous les documents récupérés pour former le contexte
-    context_main_user= "\n\n---\n\n".join([doc.page_content for doc in edt_main_user])
-    logging.info(f"Document récupéré pour {main_user}: \n {context_main_user}")
-    
-    edt_second_user = retrieve_documents(querry_text,second_user,2)
-    # Concatène tous les documents récupérés pour former le contexte
-    context_second_user= "\n\n---\n\n".join([doc.page_content for doc in edt_second_user])
-    logging.info(f"Document récupéré pour {second_user}: \n {context_main_user}")
+    st.write("Création du contexte ...")
+    #On récupère les données et on les manipules pour récupérer tout en une chaine de caractere 
+    context_main_user=fetch_and_concatenate_documents(querry_text,list_of_dates,main_user)
+    context_second_user=fetch_and_concatenate_documents(querry_text,list_of_dates,second_user)
     
     # Crée le prompt à partir du template
     prompt_template = ChatPromptTemplate.from_template(PROMPT_TEMPLATE_REUNION)
-    prompt = prompt_template.format(edt1=context_main_user,edt2=context_second_user)
+    prompt = prompt_template.format(edt1=context_main_user,edt2=context_second_user,start_date=list_of_dates[0],end_date=list_of_dates[len(list_of_dates)-1])
     
     # Ajoute le message système pour guider le comportement de l'IA
     messages = [
@@ -122,21 +126,21 @@ def generate_planning_for_2(querry_text,main_user,second_user):
     ]
     logging.info(f"Message envoyé à l'IA:\n {messages}")
     # Utilise le modèle de chat pour générer la réponse
+    st.write("Génération de la réponse")
     try:
+        st.write(messages[1])
         response = chat_model(messages=messages)
+        status.update(label="Download complete!", state="complete", expanded=False )
         return response.content  # Renvoie le contenu de la réponse générée
     except Exception as e:
         logging.error(f"Erreur lors de la génération de la réponse: {repr(e)}")
         return "Erreur lors de la génération de la réponse."
 
-
-
-
 st.set_page_config(page_title="Réunion", page_icon="📅")
 
 st.markdown("# Réunion")
 st.write(
-    """Création de réunion avec d'autres utilisateurs"""
+    """Création de réunion avec d'autres étudiants"""
 )
 
 
@@ -144,16 +148,27 @@ st.write(
 user_id1 = st.text_input("Entrez votre identifiant: ", "rcastelain")
 user_id2 = st.text_input("Entrez deuxième identifiant: ", "htiaiba")
 # Sélection des dates
-date_debut = st.date_input("Sélectionner la date de début pour la réunion :", min_value=date.today())
+date_debut = st.date_input("Sélectionner la date de début pour la réunion :")
+#Pour l'instant on met pas vu qu'on a plus de cours
+#date_debut = st.date_input("Sélectionner la date de début pour la réunion :", min_value=date.today())
 # Calcul de la date de fin max (14 jours après la date de début)
 date_fin_max = date_debut + timedelta(weeks=2)
 
 date_fin = st.date_input("Sélectionner la date de fin :", min_value=date_debut, max_value=date_fin_max)
+
+# Générer une liste de dates entre date_debut et date_fin pour les utiliser dans la recherche
+if date_fin >= date_debut:
+    liste_dates = [
+        (date_debut + timedelta(days=i)).isoformat()
+        for i in range((date_fin - date_debut).days + 1)
+    ]
+    
 # Bouton pour valider les entrées
 if st.button("Création du planning"):
     # Appel de la fonction avec les entrées
-    resultat = generate_planning_for_2(querry_text,user_id1, user_id2)
-    
+    with st.status("Génération de la réponse...", expanded=True) as status:
+        resultat = generate_planning_for_2(f"Cours entre date_debut : {date_debut}  date_fin : {date_fin}",user_id1, user_id2, liste_dates)
+
     # Affichage du résultat
     st.write(resultat)
 
